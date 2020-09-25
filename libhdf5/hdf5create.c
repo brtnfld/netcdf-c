@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "hdf5internal.h"
+#include "daos_vol_public.h"
 
 /* From hdf5file.c. */
 extern size_t nc4_chunk_cache_size;
@@ -65,7 +66,12 @@ nc4_create_file(const char *path, int cmode, size_t initialsz,
     int info_duped = 0; /* Whether the MPI Info object was duplicated */
 #endif /* !USE_PARALLEL4 */
 
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+
     assert(path);
+
+  //  printf( "PROC %d ::%s: path %s mode 0x%x\n", world_rank,__func__, path, cmode);
     LOG((3, "%s: path %s mode 0x%x", __func__, path, cmode));
 
     /* Add necessary structs to hold netcdf-4 file data. */
@@ -125,7 +131,7 @@ nc4_create_file(const char *path, int cmode, size_t initialsz,
      * fail if there are any open objects in the file. */
     if ((fapl_id = H5Pcreate(H5P_FILE_ACCESS)) < 0)
         BAIL(NC_EHDFERR);
-    if (H5Pset_fclose_degree(fapl_id, H5F_CLOSE_SEMI))
+    if (H5Pset_fclose_degree(fapl_id, H5F_CLOSE_SEMI)) //SEMI))
         BAIL(NC_EHDFERR);
 
 #ifdef USE_PARALLEL4
@@ -133,13 +139,24 @@ nc4_create_file(const char *path, int cmode, size_t initialsz,
        property list. */
     if (mpiinfo != NULL) {
         nc4_info->parallel = NC_TRUE;
+        //printf("creating parallel file with MPI/IO\n");
         LOG((4, "creating parallel file with MPI/IO"));
+       int world_size;
+        MPI_Comm_size(comm, &world_size);
+        //printf("comm size = %d\n", world_size);
+        
         if (H5Pset_fapl_mpio(fapl_id, comm, info) < 0)
             BAIL(NC_EPARINIT);
 
+        char* nc_daos = getenv("NC_DAOS");
+        if(nc_daos != NULL  && strlen(nc_daos) > 28) {
+           if(H5Pset_fapl_daos(fapl_id, comm, MPI_INFO_NULL) < 0)
+               BAIL(NC_EHDFERR);
+        }
         /* Keep copies of the MPI Comm & Info objects */
         if (MPI_SUCCESS != MPI_Comm_dup(comm, &nc4_info->comm))
             BAIL(NC_EMPI);
+
         comm_duped++;
         if (MPI_INFO_NULL != info)
         {
@@ -165,10 +182,13 @@ nc4_create_file(const char *path, int cmode, size_t initialsz,
 	     __func__, nc4_chunk_cache_size, nc4_chunk_cache_nelems,
 	     nc4_chunk_cache_preemption));
     }
+       //int world_size2;
+       // MPI_Comm_size(comm, &world_size2);
+       // printf("comm size = %d\n", world_size2);
 
 #ifdef HAVE_H5PSET_LIBVER_BOUNDS
 #if H5_VERSION_GE(1,10,2)
-    if (H5Pset_libver_bounds(fapl_id, H5F_LIBVER_EARLIEST, H5F_LIBVER_V18) < 0)
+    if (H5Pset_libver_bounds(fapl_id, H5F_LIBVER_EARLIEST, H5F_LIBVER_V112) < 0)
 #else
         if (H5Pset_libver_bounds(fapl_id, H5F_LIBVER_EARLIEST,
                                  H5F_LIBVER_LATEST) < 0)
@@ -176,6 +196,9 @@ nc4_create_file(const char *path, int cmode, size_t initialsz,
             BAIL(NC_EHDFERR);
 #endif
 
+//    H5F_libver_t low, high;         /* File format bounds */ 
+//    H5Pget_libver_bounds(fapl_id, &low, &high);
+ 
     /* Create the property list. */
     if ((fcpl_id = H5Pcreate(H5P_FILE_CREATE)) < 0)
         BAIL(NC_EHDFERR);
@@ -197,6 +220,7 @@ nc4_create_file(const char *path, int cmode, size_t initialsz,
 #ifdef HDF5_HAS_COLL_METADATA_OPS
     /* If HDF5 supports collective metadata operations, turn them
      * on. This is only relevant for parallel I/O builds of HDF5. */
+    //printf("meta coll \n");
     if (H5Pset_all_coll_metadata_ops(fapl_id, 1) < 0)
         BAIL(NC_EHDFERR);
     if (H5Pset_coll_metadata_write(fapl_id, 1) < 0)

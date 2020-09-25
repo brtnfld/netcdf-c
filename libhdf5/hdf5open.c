@@ -14,6 +14,7 @@
 #include "ncrc.h"
 #include "ncmodel.h"
 #include "ncfilter.h"
+#include "daos_vol_public.h"
 
 #ifdef ENABLE_BYTERANGE
 #include "H5FDhttp.h"
@@ -701,7 +702,7 @@ nc4_open_file(const char *path, int mode, void* parameters, int ncid)
     int info_duped = 0; /* Whether the MPI Info object was duplicated */
 #endif
     int retval;
-
+    //printf("%s: path %s mode %d \n", __func__, path, mode);
     LOG((3, "%s: path %s mode %d", __func__, path, mode));
     assert(path);
 
@@ -761,7 +762,7 @@ nc4_open_file(const char *path, int mode, void* parameters, int ncid)
     if ((fapl_id = H5Pcreate(H5P_FILE_ACCESS)) < 0)
         BAIL(NC_EHDFERR);
 
-    if (H5Pset_fclose_degree(fapl_id, H5F_CLOSE_SEMI) < 0)
+    if (H5Pset_fclose_degree(fapl_id, H5F_CLOSE_SEMI)<0) //SEMI) < 0)
         BAIL(NC_EHDFERR);
 
 #ifdef USE_PARALLEL4
@@ -772,6 +773,17 @@ nc4_open_file(const char *path, int mode, void* parameters, int ncid)
         LOG((4, "opening parallel file with MPI/IO"));
         if (H5Pset_fapl_mpio(fapl_id, mpiinfo->comm, mpiinfo->info) < 0)
             BAIL(NC_EPARINIT);
+
+        //int size;
+	//MPI_Comm_size(mpiinfo->comm, &size);
+	//printf("opening size %d \n", size);
+
+        char* nc_daos = getenv("NC_DAOS");
+        if(nc_daos != NULL  && strlen(nc_daos) > 28) {
+           if(H5Pset_fapl_daos(fapl_id, mpiinfo->comm, mpiinfo->info) < 0)
+             BAIL(NC_EHDFERR);
+        }
+
 
         /* Keep copies of the MPI Comm & Info objects */
         if (MPI_Comm_dup(mpiinfo->comm, &nc4_info->comm) != MPI_SUCCESS)
@@ -808,7 +820,7 @@ nc4_open_file(const char *path, int mode, void* parameters, int ncid)
 	     __func__, nc4_chunk_cache_size, nc4_chunk_cache_nelems,
 	     nc4_chunk_cache_preemption));
     }
-
+    //printf("NETCDF: Process  NC_INMEMORY \n");
     /* Process  NC_INMEMORY */
     if(nc4_info->mem.inmemory) {
         NC_memio* memio;
@@ -856,25 +868,27 @@ nc4_open_file(const char *path, int mode, void* parameters, int ncid)
             else
             {
                 /* Open the HDF5 file. */
+                //printf("/* Open the HDF5 file. */ %s %d %ld\n", path, flags, fapl_id);
                 if ((h5->hdfid = nc4_H5Fopen(path, flags, fapl_id)) < 0)
                     BAIL(NC_EHDFERR);
+                //printf("COMPLETED \n");
             }
 
     /* Now read in all the metadata. Some types and dimscale
      * information may be difficult to resolve here, if, for example, a
      * dataset of user-defined type is encountered before the
      * definition of that type. */
-    printf("AA rec_read_metadata \n");
+    //printf("AA rec_read_metadata \n");
     if ((retval = rec_read_metadata(nc4_info->root_grp)))
         BAIL(retval);
 
-    printf("Check for classic model attribute. \n");
+    //printf("Check for classic model attribute. \n");
 
     /* Check for classic model attribute. */
     if ((retval = check_for_classic_model(nc4_info->root_grp, &is_classic)))
         BAIL(retval);
 
-    printf("AFTER Check for classic model attribute. \n");
+    //printf("AFTER Check for classic model attribute. \n");
 
 
     if (is_classic)
@@ -898,7 +912,7 @@ nc4_open_file(const char *path, int mode, void* parameters, int ncid)
     /* Close the property list. */
     if (H5Pclose(fapl_id) < 0)
         BAIL(NC_EHDFERR);
-    printf("DONE\n");
+    //printf("DONE\n");
     return NC_NOERR;
 
 exit:
@@ -2414,11 +2428,11 @@ read_dataset(NC_GRP_INFO_T *grp, hid_t datasetid, const char *obj_name,
 
     /* Is this a dimscale? */
 
-    printf("H5DSis_scale \n");
+    //printf("H5DSis_scale \n");
 
     if ((is_scale = H5DSis_scale(datasetid)) < 0)
         BAIL(NC_EHDFERR);
-     printf("AFTER H5DSis_scale \n");
+     //printf("AFTER H5DSis_scale \n");
 
     if (is_scale)
     {
@@ -2505,7 +2519,7 @@ read_hdf5_obj(hid_t grpid, const char *name, const H5L_info_t *info,
               void *_op_data)
 {
 
-    printf("inside read_hdf5_obj\n");
+    //printf("inside read_hdf5_obj\n");
     /* Pointer to user data for callback */
     user_data_t *udata = (user_data_t *)_op_data;
     hdf5_obj_info_t oinfo;    /* Pointer to info for object */
@@ -2517,25 +2531,25 @@ read_hdf5_obj(hid_t grpid, const char *name, const H5L_info_t *info,
 
     /* Get info about the object.*/
 #if H5_VERSION_GE(1,12,0)
-    printf("H5Oget_info \n");
+    //printf("H5Oget_info \n");
     if (H5Oget_info3(oinfo.oid, &oinfo.statbuf, H5O_INFO_BASIC) < 0)
         BAIL(H5_ITER_ERROR);
 #else
     if (H5Gget_objinfo(oinfo.oid, ".", 1, &oinfo.statbuf) < 0)
         BAIL(H5_ITER_ERROR);
 #endif
-    printf("End H5Oget_info \n");
+    //printf("End H5Oget_info \n");
 
     strncpy(oinfo.oname, name, NC_MAX_NAME);
 
 
-    printf("NAME %s %d\n", name, oinfo.statbuf.type);
+    //printf("NAME %s %d\n", name, oinfo.statbuf.type);
     /* Add object to list, for later */
     switch(oinfo.statbuf.type)
     {
     case H5G_GROUP:
         LOG((3, "found group %s", oinfo.oname));
-        printf("found group %s\n", oinfo.oname);
+        //printf("found group %s\n", oinfo.oname);
         /* Defer descending into child group immediately, so that the
          * types in the current group can be processed and be ready for
          * use by vars in the child group(s). */
@@ -2545,14 +2559,14 @@ read_hdf5_obj(hid_t grpid, const char *name, const H5L_info_t *info,
 
     case H5G_DATASET:
         LOG((3, "found dataset %s", oinfo.oname));
-        printf("found dataset %s\n", oinfo.oname);
+        //printf("found dataset %s\n", oinfo.oname);
         /* Learn all about this dataset, which may be a dimscale
          * (i.e. dimension metadata), or real data. */
         if ((retval = read_dataset(udata->grp, oinfo.oid, oinfo.oname,
                                    &oinfo.statbuf)))
         {
 
-            printf("failed read_dataset \n");
+            //printf("failed read_dataset \n");
             /* Allow NC_EBADTYPID to transparently skip over datasets
              * which have a datatype that netCDF-4 doesn't understand
              * (currently), but break out of iteration for other
@@ -2565,7 +2579,7 @@ read_hdf5_obj(hid_t grpid, const char *name, const H5L_info_t *info,
 
         /* Close the object */
 
-        printf("H5Oclose \n");
+        //printf("H5Oclose \n");
         if (H5Oclose(oinfo.oid) < 0)
             BAIL(H5_ITER_ERROR);
         break;
@@ -2690,13 +2704,13 @@ rec_read_metadata(NC_GRP_INFO_T *grp)
      * read_hdf5_obj(). (I have also tried H5Oiterate(), but it is much
      * slower iterating over the same file - Ed.) */
 
-    printf("H5Literate, %ld %d %d \n", hdf5_grp->hdf_grpid, iter_index, idx);
+    //printf("H5Literate, %ld %d %d \n", hdf5_grp->hdf_grpid, iter_index, idx);
 
     if (H5Literate(hdf5_grp->hdf_grpid, iter_index, H5_ITER_INC, &idx,
                    read_hdf5_obj, (void *)&udata) < 0)
         BAIL(NC_EHDFERR);
 
-    printf("after H5Literate \n");
+    //printf("after H5Literate \n");
 
     /* Process the child groups found. (Deferred until now, so that the
      * types in the current group get processed and are available for
@@ -2762,7 +2776,9 @@ nc4_H5Fopen(const char *filename, unsigned flags, hid_t fapl_id)
     filename = nc4_ndf5_ansi_to_utf8(&pb, filename);
     if (!filename)
         return H5I_INVALID_HID;
+
     hid = H5Fopen(filename, flags, fapl_id);
+
     nc4_hdf5_free_pathbuf(&pb);
     return hid;
 }

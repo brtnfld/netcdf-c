@@ -27,8 +27,7 @@
 #ifdef ENABLE_BYTERANGE
 #include "nchttp.h"
 #endif
-#include "hdf5.h"
-
+#include <daos_vol_public.h>
 #undef DEBUG
 
 /* If Defined, then use only stdio for all magic number io;
@@ -678,7 +677,7 @@ set_default_mode(int* modep)
    combination of cmode, path, and reading the dataset.
    See the documentation in docs/internal.dox.
 
-@param path
+@aram path
 @param omode
 @param iscreate
 @param useparallel
@@ -718,10 +717,49 @@ NC_infermodel(const char* path, int* omodep, int iscreate, int useparallel, void
       MPI_Comm_size(MPI_COMM_WORLD,&size); 
       printf("NETCDF RANK %d %d\n",rank,size);
 
+     char* nc_daos = getenv("NC_DAOS");
+     if(nc_daos != NULL  && strlen(nc_daos) > 28 && params != NULL) {
+         printf("NETCDF POOL = %s \n",nc_daos);
+#ifdef USE_PARALLEL4
+         NC_MPI_INFO *mpiinfo = NULL;
+         mpiinfo = (NC_MPI_INFO *)params;
+         MPI_Comm comm = mpiinfo->comm;
+         MPI_Comm_size(comm,&size);
+         if(H5Pset_fapl_daos(fapl_id, mpiinfo->comm, mpiinfo->info) < 0)
+               goto done;
+ 
+         printf("(2) NETCDF RANK %d %d\n",rank,size);
+#endif 
+     //  if(H5daos_init( ,nc_daos, NULL) < 0)
+      //  goto done;
+     }
+
       htri_t accessible;      
       accessible = H5Fis_accessible(path, fapl_id);
       printf("IS H5Fis_accessible %d \n",accessible);
-      if(accessible) {
+      if(accessible == 1) {
+        int rc=0;
+        FILE *fp;
+        char *cmd;
+        cmd = (char*)malloc((strlen(path)+28)*sizeof(char));
+        strcpy(cmd, "getfattr ");
+        strcat(cmd, path);
+	strcat(cmd, " | grep -c '.daos'");
+     
+        if((fp = popen(cmd, "r")) != NULL) {
+            fscanf(fp, "%d", &rc);
+            pclose(fp);
+        }
+        free(cmd);
+        if(rc == 1) {
+          printf(" \033[37;01m %s IS A DAOS OBJECT \033[0m \n", path);
+          model->impl = NC_FORMATX_NC4;
+          model->format = NC_FORMAT_NETCDF4;
+          if (H5Pclose(fapl_id) < 0) goto done;
+          goto done;
+        }
+      
+#if 0 
       int POSIX=access(path, F_OK);
       printf("POSIX %d \n", POSIX);
       if( POSIX != 0 ) {
@@ -738,6 +776,9 @@ NC_infermodel(const char* path, int* omodep, int iscreate, int useparallel, void
           goto done;
         }
       }
+#endif
+     } else {
+     printf("\033[31;01m H5Fis_accessible %s NOT accessible \033[0m \n", path);
      }
    if (H5Pclose(fapl_id) < 0) goto done;
 //   } 

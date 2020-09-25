@@ -10,7 +10,7 @@
 #ifdef HAVE_STDIO_H
 #include <stdio.h>
 #endif
-
+#include <daos_vol_public.h>
 /**
 Create a netCDF file for parallel I/O.
 
@@ -125,6 +125,19 @@ int nc_create_par(const char *path, int cmode, MPI_Comm comm,
     /* Can't use both parallel and diskless|inmemory|mmap. */
     if (cmode & (NC_DISKLESS|NC_INMEMORY|NC_MMAP))
         return NC_EINVAL;
+
+     char* nc_daos = getenv("NC_DAOS");
+     if(nc_daos != NULL  && strlen(nc_daos) > 28) {
+       //  printf("NETCDF POOL = %s \n",nc_daos);
+       //  int size;
+       //  MPI_Comm_size(comm,&size);
+       //  printf("(2) NETCDF RANK %d\n",size);
+         char *pool_grp = "daos_server";
+         char *pool_svcl ="0";
+         if(H5daos_init(nc_daos, pool_grp, pool_svcl) < 0)
+            return NC_EINVAL;
+     }
+
 
     data.comm = comm;
     data.info = info;
