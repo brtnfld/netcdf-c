@@ -203,6 +203,25 @@ nc4_create_file(const char *path, int cmode, size_t initialsz,
     if (H5Pset_coll_metadata_write(fapl_id, 1) < 0)
         BAIL(NC_EHDFERR);
 #endif
+    hsize_t threshold=0;
+    hsize_t alignment=0;
+    int set_align=0;
+
+    char *pTmp;
+    if (( pTmp = getenv( "ALIGN" )) != NULL ) {
+      char delim[] = ",";
+      char *ptr = strtok(pTmp,delim);
+
+      threshold = (hsize_t)atoi(ptr);
+      ptr = strtok(NULL, delim);
+      alignment = (hsize_t)atoi(ptr);
+      set_align=1;
+    }
+    
+    if(set_align == 1) {
+      if (H5Pset_alignment(fapl_id, threshold, alignment) < 0)
+        BAIL(NC_EHDFERR);
+    }
 
     if(nc4_info->mem.inmemory) {
         retval = NC4_create_image_file(nc4_info,initialsz);
