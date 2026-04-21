@@ -1,0 +1,23 @@
+plugins/H5Zmisc.c
+  895479577e44c17c 134-137,139-142,149,159-161,163-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "3a385e60e87cda6f28787acb627cabc258607bd4",
+  "prompts": {
+    "895479577e44c17c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d0444f7-f19b-4c91-b16f-76bfa4783fe5",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 27740,
+      "total_deletions": 76,
+      "accepted_lines": 6291,
+      "overriden_lines": 0
+    }
+  }
+}
